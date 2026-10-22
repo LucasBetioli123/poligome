@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import type { Asset, Label } from "../../lib/types";
 import { fill, getCopy, storedLanguage, storedTheme, type Language } from "../../lib/i18n";
@@ -746,17 +746,25 @@ export function CanonicalEditorWorkbench() {
    * A proposta pertence ao modelo e endereço que a produziram. O estado
    * compartilhado da central invalida essa proposta ao trocar de conexão.
    */
-  useEffect(() => {
-    // Trocar o modelo/endereço ou perder a conexão invalida a proposta antiga.
-    // Cancelar antes de limpar impede uma resposta tardia de repor a máscara.
-    samRunRef.current?.abort();
-    samRunRef.current = null;
+  const samConnectionKey = `${samCatalog.endpoint}|${samCatalog.loadedModelId}|${samCatalog.connectionState}`;
+  const [samProposalConnection, setSamProposalConnection] = useState(samConnectionKey);
+  // Trocar o modelo/endereço ou perder a conexão invalida a proposta antiga.
+  // A limpeza acontece na própria renderização, e não num efeito, para não
+  // existir um quadro em que a proposta da conexão anterior ainda aparece.
+  if (samProposalConnection !== samConnectionKey) {
+    setSamProposalConnection(samConnectionKey);
     setSamLoading(false);
     setSamPrompts([]);
     setSamBoxStart(null);
     setSamBox(null);
     setSamPreviews([]);
-  }, [samCatalog.endpoint, samCatalog.loadedModelId, samCatalog.connectionState]);
+  }
+  // O cancelamento sai no mesmo commit da limpeza: uma resposta tardia encontra
+  // o ref vazio e é descartada antes de repor a máscara.
+  useLayoutEffect(() => {
+    samRunRef.current?.abort();
+    samRunRef.current = null;
+  }, [samConnectionKey]);
 
   // Um modo que o modelo carregado não aceita não vale — trocar de modelo pelo
   // painel deixaria a barra em “Texto” sobre um SAM 2.1. Derivado, e não corrigido
